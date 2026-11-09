@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="rn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BuzRider - Shoferi</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;padding:24px;max-width:420px;margin-inline:auto;background:#0f1720;color:#f2f5f7}
+  h1{font-size:1.4rem}
+  input,button{width:100%;box-sizing:border-box;padding:14px;font-size:1rem;border-radius:10px;border:1px solid #2b3a48;margin-top:12px}
+  input{background:#16212c;color:inherit}
+  button{background:#1f9d55;color:#fff;border:0;font-weight:600}
+  button.stop{background:#c0392b}
+  #status{margin-top:18px;line-height:1.5;color:#9fb3c4}
+</style>
+</head>
+<body>
+<h1>BuzRider: Shoferi</h1>
+<label for="id">Nomero cangwa izina ryawe</label>
+<input id="id" placeholder="urugero: driver1" autocomplete="off">
+<button id="btn">Tangura gusangiza aho ndi</button>
+<p id="status">Kanda buto. Ntufunge ecran mu gihe ukora.</p>
+
+<script>
+const SUPABASE_URL = "https://ixzwnvrndmarbfrrczbj.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_ASmxVo2EcHSsK8eYe3eFDg_oYY4lTjI";
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = s => document.querySelector(s);
+let watchId = null, lastSent = 0, wake = null;
+
+$("#id").value = localStorage.getItem("driverId") || "";
+
+async function send(pos){
+  const now = Date.now();
+  if (now - lastSent < 5000) return;
+  lastSent = now;
+  const { latitude: lat, longitude: lng } = pos.coords;
+  const { error } = await db.from("driver_locations").upsert({
+    driver_id: $("#id").value.trim(), lat, lng, updated_at: new Date().toISOString()
+  });
+  $("#status").textContent = error
+    ? "Ikosa: " + error.message
+    : "Byoherejwe " + new Date().toLocaleTimeString() + " (" + lat.toFixed(5) + ", " + lng.toFixed(5) + ")";
+}
+
+async function start(){
+  const id = $("#id").value.trim();
+  if (!id) { $("#status").textContent = "Andika nomero cangwa izina ryawe mbere."; return; }
+  if (!navigator.geolocation) { $("#status").textContent = "Telefone yawe ntishyigikira GPS."; return; }
+  localStorage.setItem("driverId", id);
+  try { wake = await navigator.wakeLock.request("screen"); } catch(e) {}
+  watchId = navigator.geolocation.watchPosition(send,
+    e => $("#status").textContent = "GPS: emera location muri telefone. (" + e.message + ")",
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 });
+  $("#btn").textContent = "Hagarika"; $("#btn").className = "stop";
+  $("#status").textContent = "Birakora...";
+}
+
+function stop(){
+  navigator.geolocation.clearWatch(watchId); watchId = null;
+  if (wake) wake.release();
+  $("#btn").textContent = "Tangura gusangiza aho ndi"; $("#btn").className = "";
+  $("#status").textContent = "Vyahagaritswe.";
+}
+
+$("#btn").onclick = () => watchId === null ? start() : stop();
+</script>
+</body>
+</html>
