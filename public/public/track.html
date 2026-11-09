@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="rn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BuzRider - Kurikira shoferi</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+  html,body{height:100%;margin:0;font-family:system-ui,sans-serif}
+  #map{position:absolute;inset:0}
+  #bar{position:absolute;z-index:1000;left:12px;right:12px;bottom:12px;background:#0f1720;color:#f2f5f7;padding:14px;border-radius:12px;text-align:center}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="bar">Birariko biraza...</div>
+
+<script>
+const SUPABASE_URL = "https://ixzwnvrndmarbfrrczbj.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_ASmxVo2EcHSsK8eYe3eFDg_oYY4lTjI";
+
+const driverId = new URLSearchParams(location.search).get("driver");
+const bar = document.getElementById("bar");
+if (!driverId) bar.textContent = "Ongera ?driver=NOMERO ku mpera ya link.";
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const map = L.map("map").setView([-3.3822, 29.3644], 13);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19, attribution: "&copy; OpenStreetMap"
+}).addTo(map);
+
+let marker = null, first = true;
+function show(row){
+  const pos = [row.lat, row.lng];
+  if (!marker) marker = L.marker(pos).addTo(map); else marker.setLatLng(pos);
+  if (first) { map.setView(pos, 16); first = false; } else map.panTo(pos);
+  bar.textContent = "Shoferi ari munzira. Vyavuguruwe " + new Date(row.updated_at).toLocaleTimeString();
+}
+
+if (driverId) {
+  db.from("driver_locations").select("*").eq("driver_id", driverId).maybeSingle()
+    .then(({ data }) => { if (data) show(data); else bar.textContent = "Shoferi ntaratangura gusangiza aho ari."; });
+
+  db.channel("driver-" + driverId)
+    .on("postgres_changes",
+        { event: "*", schema: "public", table: "driver_locations", filter: "driver_id=eq." + driverId },
+        payload => show(payload.new))
+    .subscribe();
+}
+</script>
+</body>
+</html>
