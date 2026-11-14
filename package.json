@@ -1,0 +1,14 @@
+{
+  "name": "buzrider",
+  "version": "1.0.0",
+  "description": "BuzRider - Driver tracking application",
+  "scripts": {
+    "dev": "npx http-server public -p 3000",
+    "build": "echo 'No build step needed for static HTML'"
+  },
+  "dependencies": {
+    "@vercel/speed-insights": "^1.0.12"
+  },
+  "devDependencies": {},
+  "private": true
+}
