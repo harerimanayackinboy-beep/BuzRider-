@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="rn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>BuzRider - Kurikira shoferi</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+  :root{--text:#111;--muted:#6b7280;--green:#16a34a;--amber:#d97706;--red:#dc2626}
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--text);overflow:hidden}
+  #map{position:absolute;inset:0}
+  #top{position:absolute;z-index:500;top:calc(env(safe-area-inset-top) + 14px);left:50%;transform:translateX(-50%);
+    background:#111;color:#fff;border-radius:999px;padding:10px 18px;font-weight:700}
+  #top b{color:#4ade80}
+  #sheet{position:absolute;z-index:500;left:0;right:0;bottom:0;background:#fff;border-radius:22px 22px 0 0;
+    padding:10px 18px calc(env(safe-area-inset-bottom) + 20px);box-shadow:0 -8px 30px rgba(0,0,0,.15)}
+  #grab{width:44px;height:4px;border-radius:4px;background:#d1d5db;margin:0 auto 12px}
+  #who{margin:0;font-size:1.4rem;text-align:center}
+  #state{display:flex;justify-content:center;align-items:center;gap:8px;margin:8px 0 0;font-weight:700}
+  #dot{width:10px;height:10px;border-radius:50%;background:#9ca3af}
+  #state.live #dot{background:var(--green);animation:pulse 1.6s infinite}
+  #state.old #dot{background:var(--amber)}
+  #state.none #dot{background:var(--red)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.7)}100%{box-shadow:0 0 0 10px rgba(22,163,74,0)}}
+  #when{margin:6px 0 0;text-align:center;color:var(--muted);font-size:.9rem}
+  .car{width:38px;height:38px;border-radius:50%;background:#111;border:3px solid #fff;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+  .car svg{width:20px;height:20px}
+  .leaflet-control-attribution{font-size:9px;margin-bottom:0}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="top">Buz<b>Rider</b></div>
+<div id="sheet">
+  <div id="grab"></div>
+  <h2 id="who">Shoferi</h2>
+  <div id="state"><span id="dot"></span><span id="stxt">Birariko biraza...</span></div>
+  <p id="when"></p>
+</div>
+
+<script>
+const SUPABASE_URL = "https://ixzwnvrndmarbfrrczbj.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_ASmxVo2EcHSsK8eYe3eFDg_oYY4lTjI";
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = s => document.querySelector(s);
+
+const name = (new URLSearchParams(location.search).get("driver") || "").trim();
+$("#who").textContent = name || "Shoferi";
+
+const map = L.map("map", { zoomControl:false }).setView([-3.3822, 29.3644], 13);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"&copy; OpenStreetMap" }).addTo(map);
+const icon = L.divIcon({ className:"", html:'<div class="car"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2l7 19-7-4-7 4z"/></svg></div>', iconSize:[38,38], iconAnchor:[19,19] });
+let marker = null, first = true;
+
+function setState(cls, text, when){
+  $("#state").className = cls; $("#stxt").textContent = text; $("#when").textContent = when || "";
+}
+
+function ago(iso){
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return "hashize amasegonda " + s;
+  const m = Math.round(s / 60);
+  if (m < 60) return "hashize iminota " + m;
+  return "hashize amasaha " + Math.round(m / 60);
+}
+
+async function refresh(){
+  if (!name) { setState("none", "Ongera ?driver=IZINA ku mpera ya link."); return; }
+  try {
+    const { data, error } = await db.rpc("proto_get_location", { p_name: name });
+    if (error) throw error;
+    if (!data || !data.found) { setState("none", "Shoferi ntaratangura gusangiza aho ari."); return; }
+    const p = [data.lat, data.lng];
+    if (!marker) marker = L.marker(p, { icon }).addTo(map); else marker.setLatLng(p);
+    if (first) { map.setView(p, 16); first = false; } else map.panTo(p);
+    const age = (Date.now() - new Date(data.updated_at).getTime()) / 1000;
+    if (age < 30) setState("live", "Shoferi ari munzira", "Vyavuguruwe " + ago(data.updated_at));
+    else setState("old", "Aho ari ntiharavugururwa", "Vyaheruka " + ago(data.updated_at));
+  } catch(e) {
+    setState("old", "Interineti ntiri kwira neza...");
+  }
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
