@@ -2,70 +2,388 @@
 <html lang="rn">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
 <title>BuzRider - Shoferi</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
-  body{font-family:system-ui,sans-serif;margin:0;padding:24px;max-width:420px;margin-inline:auto;background:#0f1720;color:#f2f5f7}
-  h1{font-size:1.4rem}
-  input,button{width:100%;box-sizing:border-box;padding:14px;font-size:1rem;border-radius:10px;border:1px solid #2b3a48;margin-top:12px}
-  input{background:#16212c;color:inherit}
-  button{background:#1f9d55;color:#fff;border:0;font-weight:600}
-  button.stop{background:#c0392b}
-  #status{margin-top:18px;line-height:1.5;color:#9fb3c4}
+  :root{--bg:#fff;--soft:#f3f4f6;--text:#111;--muted:#6b7280;--blue:#2563eb;--green:#16a34a;--red:#dc2626;--line:#e5e7eb}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  button{font:inherit;cursor:pointer;border:0}
+  .view{display:none;position:absolute;inset:0;bottom:64px;overflow-y:auto;padding:calc(env(safe-area-inset-top) + 18px) 18px 24px}
+  .view.active{display:block}
+  body.live #nav, body.auth #nav{display:none}
+  body.live #v-live, body.auth #v-auth{bottom:0}
+
+  /* ---------- auth ---------- */
+  #v-auth{text-align:center;display:none}
+  #v-auth.active{display:flex;flex-direction:column}
+  .brand{font-weight:800;font-size:1.1rem;letter-spacing:.2px;margin-top:6px}
+  .brand b{color:var(--green)}
+  #authTitle{font-size:1.9rem;margin:34px 0 6px;font-weight:800}
+  #authSub{margin:0 0 22px;color:var(--muted)}
+  #nameWrap{display:none}
+  #nameWrap input{width:100%;padding:16px;font-size:1.1rem;border-radius:14px;border:1.5px solid var(--line);background:#fff;text-align:center;outline:none}
+  #nameWrap input:focus{border-color:var(--blue)}
+  #nameWrap button{width:100%;margin-top:14px;background:var(--blue);color:#fff;font-weight:800;font-size:1.1rem;padding:17px;border-radius:999px}
+  #dots{display:none;justify-content:center;gap:16px;margin:6px 0 10px}
+  #dots i{width:18px;height:18px;border-radius:50%;border:2px solid #9ca3af;transition:.12s}
+  #dots i.on{background:#111;border-color:#111;transform:scale(1.05)}
+  #dots.shake{animation:shake .35s}
+  @keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+  #pad{display:none;grid-template-columns:repeat(3,1fr);gap:12px;max-width:300px;width:100%;margin:12px auto 0}
+  #pad button{background:var(--soft);border-radius:50%;aspect-ratio:1;font-size:1.6rem;font-weight:700;color:var(--text)}
+  #pad button:active{background:#e5e7eb}
+  #pad .blank{visibility:hidden}
+  #authMsg{min-height:1.4em;margin:12px 0 0;color:var(--muted);font-size:.92rem}
+  #authMsg.err{color:var(--red)}
+  #authSwitch{margin-top:auto;padding:14px;background:none;color:var(--blue);font-weight:700;font-size:.95rem}
+
+  /* ---------- home ---------- */
+  h1{font-size:2.3rem;line-height:1.1;margin:14px 0 4px;font-weight:800}
+  .sub{margin:0 0 18px;color:var(--muted);font-size:1.05rem}
+  .remind{display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:var(--soft);border-radius:18px;padding:16px;margin-bottom:16px}
+  .remind .ic{width:34px;height:34px;border-radius:50%;background:var(--green);color:#fff;font-weight:800;display:grid;place-items:center;flex:none}
+  .remind b{display:block;font-size:1.02rem}
+  .remind small{color:#555}
+  .mapcard{position:relative;height:310px;border-radius:20px;overflow:hidden;background:#dbeafe;margin-bottom:16px}
+  .bigblue{width:100%;background:var(--blue);color:#fff;font-weight:800;font-size:1.2rem;padding:20px;border-radius:999px}
+  .bigblue:active{opacity:.9}
+  #map{width:100%;height:100%}
+  .leaflet-control-attribution{font-size:9px}
+
+  /* ---------- live ---------- */
+  #v-live{padding:0}
+  #liveSlot{position:absolute;inset:0}
+  #livePill{position:absolute;z-index:500;top:calc(env(safe-area-inset-top) + 14px);left:50%;transform:translateX(-50%);
+    background:#111;color:#fff;border-radius:999px;padding:10px 18px;font-weight:700;display:flex;align-items:center;gap:8px}
+  #livePill i{width:9px;height:9px;border-radius:50%;background:#22c55e;animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.8)}100%{box-shadow:0 0 0 10px rgba(34,197,94,0)}}
+  #sheet{position:absolute;z-index:500;left:0;right:0;bottom:0;background:#fff;border-radius:22px 22px 0 0;
+    padding:10px 18px calc(env(safe-area-inset-bottom) + 18px);box-shadow:0 -8px 30px rgba(0,0,0,.15)}
+  #grab{width:44px;height:4px;border-radius:4px;background:#d1d5db;margin:0 auto 12px}
+  #sheet h2{margin:0 0 2px;font-size:1.5rem;text-align:center}
+  #msg{margin:0 0 14px;text-align:center;color:var(--muted);font-size:.9rem;min-height:1.2em}
+  #msg.err{color:var(--red)}
+  #stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+  .stat{background:var(--soft);border-radius:14px;padding:12px 6px;text-align:center}
+  .stat b{display:block;font-size:1.25rem}
+  .stat span{color:var(--muted);font-size:.72rem}
+  #stop{width:100%;background:#111;color:#fff;font-weight:800;padding:17px;border-radius:999px;font-size:1.05rem}
+
+  .car{width:38px;height:38px;border-radius:50%;background:#111;border:3px solid #fff;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+  .car svg{width:20px;height:20px;transition:transform .4s}
+
+  .card{background:var(--soft);border-radius:18px;padding:18px;margin-top:14px}
+  .card button{width:100%;background:#111;color:#fff;font-weight:700;padding:14px;border-radius:12px;margin-top:12px}
+  .soon{color:var(--muted);text-align:center;margin-top:60px}
+
+  #nav{position:absolute;left:0;right:0;bottom:0;height:64px;padding-bottom:env(safe-area-inset-bottom);background:#fff;border-top:1px solid var(--line);display:flex;z-index:600}
+  #nav button{flex:1;background:none;color:#8a8f98;font-size:.72rem;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-weight:600}
+  #nav button.on{color:#111;font-weight:800}
+  #nav svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 </style>
 </head>
-<body>
-<h1>BuzRider: Shoferi</h1>
-<label for="id">Nomero cangwa izina ryawe</label>
-<input id="id" placeholder="urugero: driver1" autocomplete="off">
-<button id="btn">Tangura gusangiza aho ndi</button>
-<p id="status">Kanda buto. Ntufunge ecran mu gihe ukora.</p>
+<body class="auth">
+
+<!-- LOGIN / REGISTER -->
+<section id="v-auth" class="view active">
+  <div class="brand">Buz<b>Rider</b></div>
+  <h1 id="authTitle"></h1>
+  <p id="authSub"></p>
+  <div id="nameWrap">
+    <input id="nameInp" placeholder="Izina ryawe" autocomplete="off" autocapitalize="words" maxlength="30">
+    <button id="nameGo">Komeza</button>
+  </div>
+  <div id="dots"><i></i><i></i><i></i><i></i></div>
+  <div id="pad"></div>
+  <p id="authMsg"></p>
+  <button id="authSwitch"></button>
+</section>
+
+<!-- HOME -->
+<section id="v-home" class="view">
+  <h1>Uri offline</h1>
+  <p class="sub">Witeguye gukora?</p>
+  <button class="remind" id="remind">
+    <span class="ic">&#10003;</span>
+    <span><b id="remT">Winjiye</b><small>Code yawe yemejwe uyu munsi</small></span>
+  </button>
+  <div class="mapcard" id="homeSlot"><div id="map"></div></div>
+  <button class="bigblue" id="go">Go Online</button>
+</section>
+
+<!-- LIVE -->
+<section id="v-live" class="view">
+  <div id="liveSlot"></div>
+  <div id="livePill"><i></i>Uri online</div>
+  <div id="sheet">
+    <div id="grab"></div>
+    <h2>Gushaka urugendo</h2>
+    <p id="msg">Turashaka GPS...</p>
+    <div id="stats">
+      <div class="stat"><b id="spd">0</b><span>km/h</span></div>
+      <div class="stat"><b id="last">--</b><span>Vyoherejwe</span></div>
+      <div class="stat"><b id="acc">--</b><span>GPS (m)</span></div>
+    </div>
+    <button id="stop">Go Offline</button>
+  </div>
+</section>
+
+<section id="v-earn" class="view"><h1>Amafaranga</h1><p class="soon">Biraza vuba.</p></section>
+<section id="v-inbox" class="view"><h1>Ubutumwa</h1><p class="soon">Biraza vuba.</p></section>
+<section id="v-menu" class="view">
+  <h1>Menu</h1>
+  <div class="card">
+    <b id="menuName"></b>
+    <p style="margin:6px 0 0;color:var(--muted);font-size:.9rem">Code yawe izongera gusabwa ejo mu gitondo.</p>
+    <button id="logout">Sohoka</button>
+  </div>
+</section>
+
+<nav id="nav">
+  <button data-t="home" class="on"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10H3z"/></svg>Home</button>
+  <button data-t="earn"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>Amafaranga</button>
+  <button data-t="inbox"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Ubutumwa</button>
+  <button data-t="menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Menu</button>
+</nav>
 
 <script>
 const SUPABASE_URL = "https://ixzwnvrndmarbfrrczbj.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_ASmxVo2EcHSsK8eYe3eFDg_oYY4lTjI";
-
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const $ = s => document.querySelector(s);
+
+const store = {
+  get(k){ try { return localStorage.getItem(k) || ""; } catch(e){ return ""; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch(e){} },
+  del(k){ try { localStorage.removeItem(k); } catch(e){} }
+};
+let token = store.get("buz_token"), driverName = store.get("buz_name");
 let watchId = null, lastSent = 0, wake = null;
 
-$("#id").value = localStorage.getItem("driverId") || "";
+/* ================= MAP ================= */
+const map = L.map("map", { zoomControl:false }).setView([-3.3822, 29.3644], 14);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"&copy; OpenStreetMap" }).addTo(map);
+const arrow = '<svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2l7 19-7-4-7 4z"/></svg>';
+const icon = L.divIcon({ className:"", html:'<div class="car">'+arrow+'</div>', iconSize:[38,38], iconAnchor:[19,19] });
+let marker = null;
+function putMap(slot){ slot.appendChild($("#map")); setTimeout(() => map.invalidateSize(), 60); }
+function drawMe(lat, lng, heading){
+  const p = [lat, lng];
+  if (!marker) marker = L.marker(p, { icon }).addTo(map); else marker.setLatLng(p);
+  if (heading != null && !isNaN(heading)) { const el = marker.getElement(), s = el && el.querySelector("svg"); if (s) s.style.transform = "rotate(" + heading + "deg)"; }
+  map.setView(p, Math.max(map.getZoom(), 15), { animate:true });
+}
+function peek(){ navigator.geolocation && navigator.geolocation.getCurrentPosition(
+  p => drawMe(p.coords.latitude, p.coords.longitude, null), () => {}, { timeout:8000 }); }
 
-async function send(pos){
+/* ================= TABS ================= */
+function show(id){
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  $("#" + id).classList.add("active");
+}
+function tab(t){
+  show("v-" + t);
+  document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  if (t === "home") putMap($("#homeSlot"));
+}
+document.querySelectorAll("#nav button").forEach(b => b.onclick = () => tab(b.dataset.t));
+$("#remind").onclick = () => tab("menu");
+
+/* ================= AUTH (name + 4-digit code) ================= */
+// screens: name-reg -> pin-reg -> confirm-reg   |   name-login -> pin-login
+let screen = "name-login", pin = "", firstPin = "", pendingName = "", busy = false;
+
+const pad = $("#pad");
+["1","2","3","4","5","6","7","8","9","","0","<"].forEach(k => {
+  const b = document.createElement("button");
+  if (k === "") b.className = "blank"; else b.textContent = k === "<" ? "⌫" : k;
+  if (k !== "") b.onclick = () => key(k);
+  pad.appendChild(b);
+});
+
+function authMsg(t, err){ const m = $("#authMsg"); m.textContent = t || ""; m.className = err ? "err" : ""; }
+function paintDots(){ document.querySelectorAll("#dots i").forEach((d,i) => d.classList.toggle("on", i < pin.length)); }
+function shake(){ const d = $("#dots"); d.classList.remove("shake"); void d.offsetWidth; d.classList.add("shake"); }
+
+function setScreen(s, msg, err){
+  screen = s; pin = ""; paintDots(); authMsg(msg, err);
+  const needName = s.startsWith("name-");
+  $("#nameWrap").style.display = needName ? "block" : "none";
+  $("#dots").style.display = needName ? "none" : "flex";
+  $("#pad").style.display = needName ? "none" : "grid";
+  const T = {
+    "name-reg":   ["Fungura konti",       "Andika izina ryawe"],
+    "pin-reg":    ["Hitamo code",         "Imibare 4 uzajya wandika buri gitondo"],
+    "confirm-reg":["Subiramo code",       "Yandike indi mpera"],
+    "name-login": ["Injira",              "Andika izina ryawe"],
+    "pin-login":  ["Muraho, " + driverName, "Andika code yawe y'imibare 4"]
+  }[s];
+  $("#authTitle").textContent = T[0]; $("#authSub").textContent = T[1];
+  const sw = $("#authSwitch");
+  sw.textContent = { "name-reg":"Ufite konti? Injira", "name-login":"Nta konti? Fungura", "pin-login":"Si jewe? Hindura", "pin-reg":"Subira inyuma", "confirm-reg":"Subira inyuma" }[s];
+  if (needName) { $("#nameInp").value = ""; setTimeout(() => $("#nameInp").focus(), 50); }
+}
+$("#authSwitch").onclick = () => {
+  if (screen === "name-reg") setScreen("name-login");
+  else if (screen === "name-login") setScreen("name-reg");
+  else if (screen === "pin-login") { driverName = ""; store.del("buz_name"); setScreen("name-login"); }
+  else setScreen("name-reg");
+};
+
+function showAuth(msg, err){
+  document.body.classList.add("auth");
+  document.body.classList.remove("live");
+  show("v-auth");
+  setScreen(driverName ? "pin-login" : "name-reg", msg, err);
+}
+
+$("#nameGo").onclick = nameNext;
+$("#nameInp").addEventListener("keydown", e => { if (e.key === "Enter") nameNext(); });
+function nameNext(){
+  const n = $("#nameInp").value.trim();
+  if (n.length < 2) { authMsg("Izina rigomba kuba rifite inyuguti 2 nibura.", true); return; }
+  if (screen === "name-reg") { pendingName = n; setScreen("pin-reg"); }
+  else { driverName = n; setScreen("pin-login"); }
+}
+
+function key(k){
+  if (busy) return;
+  if (k === "<") { pin = pin.slice(0, -1); paintDots(); return; }
+  if (pin.length >= 4) return;
+  pin += k; paintDots(); authMsg("");
+  if (pin.length === 4) setTimeout(submitPin, 150);
+}
+
+async function submitPin(){
+  if (screen === "pin-reg") { firstPin = pin; setScreen("confirm-reg"); return; }
+  if (screen === "confirm-reg") {
+    if (pin !== firstPin) { shake(); setScreen("pin-reg", "Ntihuye. Ongera uhitemo code.", true); return; }
+    return call("proto_register", { p_name: pendingName, p_pin: pin });
+  }
+  if (screen === "pin-login") return call("proto_login", { p_name: driverName, p_pin: pin });
+}
+
+async function call(fn, args){
+  busy = true; authMsg("Tegereza...");
+  let res;
+  try {
+    const { data, error } = await db.rpc(fn, args);
+    if (error) throw error;
+    res = data;
+  } catch(e) {
+    busy = false; shake();
+    setScreen(screen === "confirm-reg" ? "pin-reg" : screen, "Ikosa rya interineti. Ongera ugerageze.", true);
+    return;
+  }
+  busy = false;
+  if (res && res.ok) {
+    token = res.token; driverName = res.name;
+    store.set("buz_token", token); store.set("buz_name", driverName);
+    enterApp();
+    return;
+  }
+  shake();
+  const e = res && res.error;
+  if (e === "name_taken") { setScreen("name-reg", "Iryo zina ryafashwe. Hitamo irindi.", true); }
+  else if (e === "bad_name") { setScreen("name-reg", "Izina ntiryemewe.", true); }
+  else if (e === "locked") { setScreen("pin-login", "Wafunzwe iminota " + res.minutes + ". Ongera nyuma.", true); }
+  else if (e === "wrong") { setScreen(screen === "confirm-reg" ? "pin-reg" : "pin-login", "Code cangwa izina siryo.", true); }
+  else { setScreen(screen === "confirm-reg" ? "pin-reg" : screen, "Habaye ikosa. Ongera ugerageze.", true); }
+}
+
+/* ================= APP ================= */
+function enterApp(){
+  document.body.classList.remove("auth");
+  $("#remT").textContent = "Winjiye nka " + driverName;
+  $("#menuName").textContent = driverName;
+  tab("home");
+  peek();
+}
+
+$("#logout").onclick = () => {
+  if (watchId !== null) stopWatch();
+  token = ""; store.del("buz_token");
+  showAuth();
+};
+
+function say(t, err){ const m = $("#msg"); m.textContent = t; m.className = err ? "err" : ""; }
+
+async function onPos(pos){
+  const { latitude:lat, longitude:lng, speed, accuracy, heading } = pos.coords;
+  drawMe(lat, lng, heading);
+  $("#spd").textContent = speed ? Math.round(speed * 3.6) : 0;
+  $("#acc").textContent = accuracy ? Math.round(accuracy) : "--";
   const now = Date.now();
   if (now - lastSent < 5000) return;
   lastSent = now;
-  const { latitude: lat, longitude: lng } = pos.coords;
-  const { error } = await db.from("driver_locations").upsert({
-    driver_id: $("#id").value.trim(), lat, lng, updated_at: new Date().toISOString()
-  });
-  $("#status").textContent = error
-    ? "Ikosa: " + error.message
-    : "Byoherejwe " + new Date().toLocaleTimeString() + " (" + lat.toFixed(5) + ", " + lng.toFixed(5) + ")";
+  const { data, error } = await db.rpc("proto_update_location", { p_token: token, p_lat: lat, p_lng: lng });
+  if (error) { say("Ikosa: " + error.message, true); return; }
+  if (data && data.error === "no_session") {
+    // a new day started: the code is needed again
+    stopWatch(); token = ""; store.del("buz_token");
+    showAuth("Ni igitondo gishasha. Andika code yawe.");
+    return;
+  }
+  if (data && data.ok) {
+    $("#last").textContent = new Date().toLocaleTimeString([], { hour:"2-digit", minute:"2-digit", hour12:false });
+    say("Abakiriya barakubona.");
+  } else say("Ikosa mu kohereza aho uri.", true);
 }
 
-async function start(){
-  const id = $("#id").value.trim();
-  if (!id) { $("#status").textContent = "Andika nomero cangwa izina ryawe mbere."; return; }
-  if (!navigator.geolocation) { $("#status").textContent = "Telefone yawe ntishyigikira GPS."; return; }
-  localStorage.setItem("driverId", id);
-  try { wake = await navigator.wakeLock.request("screen"); } catch(e) {}
-  watchId = navigator.geolocation.watchPosition(send,
-    e => $("#status").textContent = "GPS: emera location muri telefone. (" + e.message + ")",
-    { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 });
-  $("#btn").textContent = "Hagarika"; $("#btn").className = "stop";
-  $("#status").textContent = "Birakora...";
+async function getWake(){ try { wake = await navigator.wakeLock.request("screen"); } catch(e) {} }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && watchId !== null) getWake(); });
+
+async function goOnline(){
+  if (!navigator.geolocation) { alert("Telefone yawe ntishyigikira GPS."); return; }
+  // Same-day check only: no code needed again today
+  try {
+    const { data } = await db.rpc("proto_check_session", { p_token: token });
+    if (!data || !data.ok) { token = ""; store.del("buz_token"); showAuth("Ni igitondo gishasha. Andika code yawe."); return; }
+  } catch(e) { /* offline: try anyway, the first send will tell us */ }
+  await getWake();
+  document.body.classList.add("live");
+  show("v-live");
+  putMap($("#liveSlot"));
+  say("Turashaka GPS...");
+  watchId = navigator.geolocation.watchPosition(onPos,
+    e => say("GPS: emera location muri telefone. (" + e.message + ")", true),
+    { enableHighAccuracy:true, maximumAge:2000, timeout:15000 });
 }
 
-function stop(){
-  navigator.geolocation.clearWatch(watchId); watchId = null;
-  if (wake) wake.release();
-  $("#btn").textContent = "Tangura gusangiza aho ndi"; $("#btn").className = "";
-  $("#status").textContent = "Vyahagaritswe.";
+function stopWatch(){
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  if (wake) { wake.release(); wake = null; }
+  document.body.classList.remove("live");
+  $("#spd").textContent = "0";
 }
+function goOffline(){ stopWatch(); tab("home"); }
 
-$("#btn").onclick = () => watchId === null ? start() : stop();
+$("#go").onclick = goOnline;
+$("#stop").onclick = goOffline;
+
+/* ================= START ================= */
+(async function start(){
+  if (token) {
+    try {
+      const { data } = await db.rpc("proto_check_session", { p_token: token });
+      if (data && data.ok) { driverName = data.name; store.set("buz_name", driverName); enterApp(); return; }
+    } catch(e) {
+      // no internet: keep the saved login, the server will check on the first send
+      if (driverName) { enterApp(); return; }
+    }
+    token = ""; store.del("buz_token");
+    showAuth(driverName ? "Ni igitondo gishasha. Andika code yawe." : "");
+    return;
+  }
+  showAuth();
+})();
 </script>
 </body>
 </html>
